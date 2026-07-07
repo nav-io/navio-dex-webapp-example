@@ -26,13 +26,23 @@ export interface ExplorerSupply {
   network: string;
 }
 
+/**
+ * A collection as the explorer returns it. Note `metadata` is an ARRAY of
+ * key/value pairs (mirroring the daemon's `gettoken`), not an object — the
+ * name lives at the `name` key. Supply fields are snake_case.
+ */
 export interface ExplorerToken {
   token_id: string;
-  name?: string;
   type?: string;
+  public_key?: string;
   max_supply?: number;
   current_supply?: number;
-  metadata?: Record<string, string>;
+  metadata?: Array<{ key: string; value: string }>;
+}
+
+/** Pull the display name out of a collection's metadata array. */
+export function tokenName(t: ExplorerToken): string | null {
+  return t.metadata?.find((m) => m.key === 'name')?.value ?? null;
 }
 
 export class ExplorerApi {

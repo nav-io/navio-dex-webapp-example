@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useWallet } from '../state/WalletContext';
-import { ExplorerSupply, ExplorerToken } from '../lib/explorer';
+import { ExplorerSupply, ExplorerToken, tokenName } from '../lib/explorer';
 import { shorten } from '../lib/format';
 import { Amount } from './Amount';
 
@@ -75,15 +75,17 @@ export function Market({ onTrade }: { onTrade: () => void }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Name</th><th>Type</th><th>Token id</th><th className="num">Supply</th></tr>
+              <tr><th>Name</th><th>Type</th><th>Token id</th><th className="num">Minted / max</th></tr>
             </thead>
             <tbody>
               {tokens.map((t) => (
                 <tr key={t.token_id}>
-                  <td>{t.name ?? t.metadata?.name ?? '—'}</td>
+                  <td>{tokenName(t) ?? <span className="empty">unnamed</span>}</td>
                   <td><span className="tag">{t.type ?? 'token'}</span></td>
                   <td className="mono" title={t.token_id}>{shorten(t.token_id, 14, 6)}</td>
-                  <td className="num">{t.current_supply?.toLocaleString() ?? '—'}</td>
+                  <td className="num">
+                    {(t.current_supply ?? 0).toLocaleString()} / {(t.max_supply ?? 0).toLocaleString()}
+                  </td>
                 </tr>
               ))}
             </tbody>
