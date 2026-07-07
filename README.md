@@ -62,9 +62,6 @@ them:
 - [nav-io/electrumx#2](https://github.com/nav-io/electrumx/pull/2) — the Electrum-protocol RFQ bridge
 - [nav-io/navio-sdk#9](https://github.com/nav-io/navio-sdk/pull/9) — the trading API this app calls (`navio-sdk ≥ 0.1.18`)
 
-If `navio-sdk@0.1.18` isn't on npm yet, point the dependency at the
-branch: `npm i github:nav-io/navio-sdk#rfq-swap-trading`.
-
 ### Full local playground
 
 ```sh
