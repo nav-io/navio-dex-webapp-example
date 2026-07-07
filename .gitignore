@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+# Local regtest state (daemon datadirs, electrumx DB, logs, pids)
+.regtest/
+# package-lock is intentionally not committed while navio-sdk@0.1.18 is
+# unreleased (a lock would pin a local tarball path). Regenerate locally;
+# see README "Trading prerequisites".
+package-lock.json

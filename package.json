@@ -1,0 +1,30 @@
+{
+  "name": "navio-dex-webapp-example",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Example DEX web app built on navio-sdk: in-browser wallet, token/NFT minting, and peer-to-peer RFQ atomic-swap trading over Navio's encrypted p2p messaging bus.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "regtest:up": "bash scripts/regtest-up.sh",
+    "regtest:down": "bash scripts/regtest-down.sh",
+    "regtest:fund": "bash scripts/fund-wallet.sh",
+    "regtest:maker": "bash scripts/counterparty-maker.sh"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "navio-blsct": "^1.1.15",
+    "navio-sdk": "^0.1.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
+  }
+}
