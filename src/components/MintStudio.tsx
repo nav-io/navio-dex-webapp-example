@@ -33,6 +33,28 @@ import { CollectionInfo, fetchCollectionInfo } from '../lib/token';
 
 type AssetType = 'token' | 'nft';
 
+/**
+ * Translate the daemon's opaque mint rejection into something actionable.
+ * `failed-to-execute-predicate` (navio-core blsct/tokens/predicate_exec.cpp)
+ * is returned for every reason a mint can't apply, so we can't know which
+ * one from the message alone — but these are the only causes, and listing
+ * them is far more useful than the raw string. Needed most on servers whose
+ * Electrum build predates `blockchain.token.get_token`, where the app can't
+ * inspect the collection up front (e.g. public testnet today).
+ */
+function explainMintError(message: string): string {
+  if (!/failed-to-execute-predicate/i.test(message)) return message;
+  return (
+    'The network rejected the mint (failed-to-execute-predicate). For a mint that ' +
+    'means one of: the collection is a different type than what you minted (a token ' +
+    'amount into an NFT collection or vice-versa); the amount would exceed the ' +
+    'collection’s max supply, or the NFT id is outside 0…max-1; or the collection was ' +
+    'created by a different wallet (or an older app version) whose token key this ' +
+    'wallet does not hold. Creating a fresh collection here and minting into it will ' +
+    'always work.'
+  );
+}
+
 interface CreatedCollection {
   id: string;
   type: AssetType;
@@ -112,7 +134,7 @@ export function MintStudio() {
       await fn();
       await refresh();
     } catch (err: any) {
-      setError(err?.message ?? String(err));
+      setError(explainMintError(err?.message ?? String(err)));
     } finally {
       setBusy('');
     }
