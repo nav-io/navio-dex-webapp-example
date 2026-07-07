@@ -325,7 +325,7 @@ export function MintStudio() {
             {chainLoading ? (
               <p className="hint">Looking up the collection on-chain…</p>
             ) : chainInfo ? (
-              <div className={`collection-status${chainInfo.mintableByThisWallet ? '' : ' bad'}`}>
+              <div className="collection-status">
                 <div className="row spread">
                   <span><span className="tag">{chainInfo.type}</span> {chainInfo.metadata.name ?? 'collection'}</span>
                   <span className="mono">
@@ -334,13 +334,6 @@ export function MintStudio() {
                       : `${chainInfo.maxSupply} ids (0…${chainInfo.maxSupply - 1n})`}
                   </span>
                 </div>
-                {!chainInfo.mintableByThisWallet && (
-                  <p className="error">
-                    This collection looks like it was created by a different wallet or an older app
-                    version — this wallet likely can't mint into it (only the creating wallet's
-                    token key can). Create a new collection to mint your own.
-                  </p>
-                )}
               </div>
             ) : selected ? (
               <p className="hint">

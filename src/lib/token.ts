@@ -11,16 +11,12 @@
  *      NFT into a fungible one). The predicate checks `token.info.type`.
  *   2. Supply — a fungible mint must keep `currentSupply + amount` within
  *      `maxSupply`; an NFT id must be `< maxSupply`.
- *   3. Wrong KEY — the collection is minted under a token key derived from
- *      the CREATOR wallet's seed. A different wallet (or an older app/binding
- *      version whose derivation differed) derives a different key, so its
- *      mints reference a token the chain has no record of. This is the
- *      subtle one: the collection is perfectly valid and fungible, yet YOUR
- *      wallet still can't mint into it.
- *
- * We answer all three by combining the daemon's `gettoken` (via the Electrum
- * `blockchain.token.get_token` bridge) with a local re-derivation of the
- * token public key from this wallet's master token key.
+ * We answer 1 and 2 from the daemon's `gettoken` (via the Electrum
+ * `blockchain.token.get_token` bridge). Cause 3 (wrong wallet) can't be
+ * detected reliably up front — it would require re-deriving the token key
+ * exactly as the SDK does (id normalization included) and matching the
+ * daemon's key serialization byte-for-byte — so we surface it only after a
+ * mint is rejected, via the error explanation in MintStudio.
  */
 import type { NavioClient } from 'navio-sdk';
 
@@ -32,8 +28,6 @@ export interface CollectionInfo {
   maxSupply: bigint;
   currentSupply: bigint;
   metadata: Record<string, string>;
-  /** True when THIS wallet's derived key matches — i.e. it can mint here. */
-  mintableByThisWallet: boolean;
 }
 
 /** Raw daemon shape returned by `gettoken`. */
@@ -76,31 +70,5 @@ export async function fetchCollectionInfo(
     maxSupply: BigInt(raw.maxSupply ?? 0),
     currentSupply: BigInt(raw.currentSupply ?? 0),
     metadata,
-    mintableByThisWallet: await walletDerivesKey(client, collectionTokenId, raw.publicKey),
   };
-}
-
-/**
- * Does this wallet derive the same token public key the collection was
- * created under? Re-derives locally from the master token key using the same
- * primitive the SDK uses at create/mint time. Any failure is treated as
- * "unknown" (true) so we never block a mint on a derivation hiccup — the
- * chain remains the final authority.
- */
-async function walletDerivesKey(
-  client: NavioClient,
-  collectionTokenId: string,
-  committedPublicKey: string,
-): Promise<boolean> {
-  try {
-    // deriveCollectionTokenPublicKeyFromMaster is exported by navio-blsct at
-    // runtime (the SDK uses it) even though it is absent from the public
-    // type surface — hence the `any`.
-    const blsct = (await import('navio-blsct')) as any;
-    const masterTokenKey = client.getKeyManager().getMasterTokenKey();
-    const derived = blsct.deriveCollectionTokenPublicKeyFromMaster(masterTokenKey, collectionTokenId);
-    return derived.serialize() === committedPublicKey;
-  } catch {
-    return true;
-  }
 }
