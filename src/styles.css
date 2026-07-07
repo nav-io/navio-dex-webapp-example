@@ -274,6 +274,13 @@ tr.best td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 .collection-item .ghost { padding: 0.15rem 0.45rem; font-size: 0.75rem; }
 
+.collection-status {
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.75rem;
+  background: var(--ink); font-size: 0.82rem;
+}
+.collection-status.bad { border-color: var(--danger); background: rgba(255, 107, 129, 0.06); }
+.collection-status .mono { color: var(--muted); }
+
 /* ---- gate ---- */
 .gate {
   min-height: 100%; display: flex; flex-direction: column;

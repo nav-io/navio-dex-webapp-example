@@ -24,11 +24,12 @@
  * be mined into a block before you can mint into it (the studio reminds
  * you); on a public network just wait for a confirmation.
  */
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '../state/WalletContext';
 import { shorten } from '../lib/format';
 import { UnlockInline } from './Portfolio';
 import { MetaRow, MetadataEditor, toMetadata } from './MetadataEditor';
+import { CollectionInfo, fetchCollectionInfo } from '../lib/token';
 
 type AssetType = 'token' | 'nft';
 
@@ -58,14 +59,43 @@ export function MintStudio() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
-  // The mint form adapts to the chosen collection's type. If the id was
-  // typed by hand (not created this session), fall back to a manual toggle.
+  // Chain-authoritative info for the collection being minted into. Looked up
+  // from the daemon (via the Electrum bridge) so the form knows the real
+  // type, remaining supply, and — crucially — whether THIS wallet can mint
+  // into it at all. Prevents the opaque failed-to-execute-predicate rejection.
+  const [chainInfo, setChainInfo] = useState<CollectionInfo | null>(null);
+  const [chainLoading, setChainLoading] = useState(false);
+
   const selected = useMemo(
     () => collections.find((c) => c.id === collectionId.trim()),
     [collections, collectionId],
   );
   const [manualMintType, setManualMintType] = useState<AssetType>('token');
-  const mintType: AssetType = selected?.type ?? manualMintType;
+  // Chain truth wins; then a collection we created this session; then the
+  // manual toggle for ids we know nothing about (offline / no indexer).
+  const mintType: AssetType = chainInfo?.type ?? selected?.type ?? manualMintType;
+
+  // Debounced on-chain lookup whenever the collection id settles.
+  useEffect(() => {
+    const id = collectionId.trim();
+    if (!session || id.length < 64) {
+      setChainInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setChainLoading(true);
+    const t = setTimeout(async () => {
+      const info = await fetchCollectionInfo(session.client, id);
+      if (!cancelled) {
+        setChainInfo(info);
+        setChainLoading(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [collectionId, session]);
 
   if (!session) return null;
 
@@ -115,10 +145,22 @@ export function MintStudio() {
   function onMint(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const id = collectionId.trim();
+    // Note: we do NOT hard-block on a key mismatch. The status panel already
+    // warns when this wallet's derived key doesn't match the collection's, but
+    // that comparison depends on the daemon and binding serializing the token
+    // key identically — if they ever diverge we'd wrongly block a valid mint.
+    // So we let the attempt proceed; the chain is the final authority, and a
+    // genuine mismatch fails on-chain with the context the warning provided.
     void guard('mint', async () => {
       const address = String((e.target as HTMLFormElement).address?.value || '').trim() || session!.address;
       let txId: string;
       if (mintType === 'token') {
+        if (chainInfo && chainInfo.currentSupply + BigInt(mintAmount || '0') > chainInfo.maxSupply) {
+          throw new Error(
+            `Minting ${mintAmount} would exceed the max supply ` +
+              `(${chainInfo.currentSupply} of ${chainInfo.maxSupply} already minted)`,
+          );
+        }
         ({ txId } = await session!.client.mintToken({
           address,
           collectionTokenId: id,
@@ -126,13 +168,10 @@ export function MintStudio() {
         }));
         log('ok', `Minted ${mintAmount} into ${shorten(id, 10, 4)}`, txId);
       } else {
-        // The chain requires 0 <= nftId < collection max supply. Guard here
-        // when we know the supply (collection created this session) so the
-        // user gets a clear message instead of a network predicate rejection.
-        if (selected && Number(nftId) >= selected.maxSupply) {
-          throw new Error(
-            `NFT sub-id must be between 0 and ${selected.maxSupply - 1} for this collection`,
-          );
+        // The chain requires 0 <= nftId < collection max supply.
+        const cap = chainInfo ? Number(chainInfo.maxSupply) : selected?.maxSupply;
+        if (cap !== undefined && Number(nftId) >= cap) {
+          throw new Error(`NFT sub-id must be between 0 and ${cap - 1} for this collection`);
         }
         ({ txId } = await session!.client.mintNft({
           address,
@@ -261,12 +300,34 @@ export function MintStudio() {
               </datalist>
             </label>
 
-            {selected ? (
+            {chainLoading ? (
+              <p className="hint">Looking up the collection on-chain…</p>
+            ) : chainInfo ? (
+              <div className={`collection-status${chainInfo.mintableByThisWallet ? '' : ' bad'}`}>
+                <div className="row spread">
+                  <span><span className="tag">{chainInfo.type}</span> {chainInfo.metadata.name ?? 'collection'}</span>
+                  <span className="mono">
+                    {chainInfo.type === 'token'
+                      ? `${chainInfo.currentSupply} / ${chainInfo.maxSupply} minted`
+                      : `${chainInfo.maxSupply} ids (0…${chainInfo.maxSupply - 1n})`}
+                  </span>
+                </div>
+                {!chainInfo.mintableByThisWallet && (
+                  <p className="error">
+                    This collection looks like it was created by a different wallet or an older app
+                    version — this wallet likely can't mint into it (only the creating wallet's
+                    token key can). Create a new collection to mint your own.
+                  </p>
+                )}
+              </div>
+            ) : selected ? (
               <p className="hint">
                 Minting a <strong>{selected.type === 'token' ? 'fungible amount' : 'unique NFT'}</strong>{' '}
                 into “{selected.name}”.
               </p>
             ) : (
+              // No chain info (offline / no indexer) and not created this
+              // session: fall back to a manual type toggle.
               <div className="segmented" role="tablist" aria-label="Mint type">
                 <button
                   type="button"
