@@ -2,39 +2,74 @@
  * Mint studio: token & NFT creation
  * =================================
  *
- * Navio assets live in two layers:
+ * Navio assets come in two layers:
  *
- *   1. A COLLECTION — an on-chain declaration carrying metadata and a max
- *      supply, created with `createTokenCollection` (fungible) or
- *      `createNftCollection`. Its token id is derived from the metadata +
- *      supply, and minting authority belongs to a token key derived from
- *      this wallet's seed — only the creating wallet can mint into it.
+ *   1. A COLLECTION — an on-chain declaration created with
+ *      `createTokenCollection` (fungible) or `createNftCollection`. Its
+ *      token id is DERIVED from its metadata + max supply
+ *      (`calcCollectionTokenHashHex`), and only the creating wallet's
+ *      token key — also derived from the seed — can mint into it. Because
+ *      the id is derived, the collection's metadata is fixed at creation.
  *
- *   2. MINTS into the collection — `mintToken` (amount of fungible units)
- *      or `mintNft` (one sub-id + per-NFT metadata each).
+ *   2. MINTS into it — `mintToken` (an amount of fungible units) or
+ *      `mintNft` (one sub-id plus that piece's own metadata).
  *
- * Both steps are ordinary confidential transactions paying a NAV fee.
- * After the collection tx confirms, mint into it (the studio remembers
- * collections you created this session; you can also paste any collection
- * id you control from a previous session).
+ * The form is fully controlled and ADAPTS to the selected type:
+ *   - fungible token: name/metadata + max supply → later mint an amount;
+ *   - NFT collection: name/metadata → later mint sub-ids with per-NFT
+ *     metadata (no amount).
+ *
+ * Both steps are ordinary confidential transactions paying a NAV fee, so
+ * the wallet needs some NAV. On regtest a freshly created collection must
+ * be mined into a block before you can mint into it (the studio reminds
+ * you); on a public network just wait for a confirmation.
  */
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useWallet } from '../state/WalletContext';
 import { shorten } from '../lib/format';
 import { UnlockInline } from './Portfolio';
+import { MetaRow, MetadataEditor, toMetadata } from './MetadataEditor';
+
+type AssetType = 'token' | 'nft';
 
 interface CreatedCollection {
   id: string;
-  kind: 'token' | 'nft';
+  type: AssetType;
   name: string;
+  /** For NFT collections: mintable NFT ids are 0 .. maxSupply-1. */
+  maxSupply: number;
 }
 
 export function MintStudio() {
-  const { session, refresh, log, locked, unlock } = useWallet();
+  const { session, navBalance, refresh, log, locked, unlock } = useWallet();
+
+  // --- create-collection form state ---
+  const [createType, setCreateType] = useState<AssetType>('token');
+  const [createMeta, setCreateMeta] = useState<MetaRow[]>([{ key: 'name', value: '' }]);
+  const [maxSupply, setMaxSupply] = useState('1000000');
+
+  // --- mint form state ---
+  const [collectionId, setCollectionId] = useState('');
+  const [mintAmount, setMintAmount] = useState('1000');
+  const [nftId, setNftId] = useState('1');
+  const [nftMeta, setNftMeta] = useState<MetaRow[]>([{ key: 'name', value: '' }]);
+
+  const [collections, setCollections] = useState<CreatedCollection[]>([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [collections, setCollections] = useState<CreatedCollection[]>([]);
+
+  // The mint form adapts to the chosen collection's type. If the id was
+  // typed by hand (not created this session), fall back to a manual toggle.
+  const selected = useMemo(
+    () => collections.find((c) => c.id === collectionId.trim()),
+    [collections, collectionId],
+  );
+  const [manualMintType, setManualMintType] = useState<AssetType>('token');
+  const mintType: AssetType = selected?.type ?? manualMintType;
+
   if (!session) return null;
+
+  const hasFunds = navBalance > 0n;
 
   async function guard(label: string, fn: () => Promise<void>) {
     if (locked) {
@@ -55,147 +90,245 @@ export function MintStudio() {
 
   function onCreateCollection(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const kind = String(data.get('kind')) as 'token' | 'nft';
-    const name = String(data.get('name') ?? 'Asset');
-    const supply = Number(data.get('supply') || 0);
+    const metadata = toMetadata(createMeta);
+    const name = metadata.name || 'Untitled';
+    const supply = Number(maxSupply || 0);
+    if (supply <= 0) {
+      // For NFTs this is not cosmetic: the chain only lets you mint ids in
+      // [0, maxSupply), so a 0-supply collection can never be minted into.
+      setError('Max supply must be at least 1');
+      return;
+    }
     void guard('collection', async () => {
-      const metadata = { name };
       const result =
-        kind === 'token'
+        createType === 'token'
           ? await session!.client.createTokenCollection({ metadata, totalSupply: supply })
           : await session!.client.createNftCollection({ metadata, totalSupply: supply });
-      setCollections((prev) => [{ id: result.collectionTokenId, kind, name }, ...prev]);
-      log('ok', `Created ${kind} collection "${name}"`, result.txId);
-      form.reset();
+      setCollections((prev) => [{ id: result.collectionTokenId, type: createType, name, maxSupply: supply }, ...prev]);
+      // Pre-fill the mint form with the collection we just made.
+      setCollectionId(result.collectionTokenId);
+      log('ok', `Created ${createType} collection "${name}"`, result.txId);
+      setCreateMeta([{ key: 'name', value: '' }]);
     });
   }
 
   function onMint(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const collectionTokenId = String(data.get('collection') ?? '').trim();
-    const kind = collections.find((c) => c.id === collectionTokenId)?.kind
-      ?? (String(data.get('mintKind')) as 'token' | 'nft');
+    const id = collectionId.trim();
     void guard('mint', async () => {
-      // Minting to your own address keeps the demo self-contained; any
-      // BLSCT address works (e.g. mint directly to a buyer).
-      const address = String(data.get('address') || session!.address);
+      const address = String((e.target as HTMLFormElement).address?.value || '').trim() || session!.address;
       let txId: string;
-      if (kind === 'token') {
+      if (mintType === 'token') {
         ({ txId } = await session!.client.mintToken({
           address,
-          collectionTokenId,
-          amount: BigInt(String(data.get('amount') || '0')),
+          collectionTokenId: id,
+          amount: BigInt(mintAmount || '0'),
         }));
+        log('ok', `Minted ${mintAmount} into ${shorten(id, 10, 4)}`, txId);
       } else {
+        // The chain requires 0 <= nftId < collection max supply. Guard here
+        // when we know the supply (collection created this session) so the
+        // user gets a clear message instead of a network predicate rejection.
+        if (selected && Number(nftId) >= selected.maxSupply) {
+          throw new Error(
+            `NFT sub-id must be between 0 and ${selected.maxSupply - 1} for this collection`,
+          );
+        }
         ({ txId } = await session!.client.mintNft({
           address,
-          collectionTokenId,
-          nftId: BigInt(String(data.get('nftId') || '0')),
-          metadata: { name: String(data.get('nftName') || 'NFT') },
+          collectionTokenId: id,
+          nftId: BigInt(nftId || '0'),
+          metadata: toMetadata(nftMeta),
         }));
+        log('ok', `Minted NFT #${nftId} into ${shorten(id, 10, 4)}`, txId);
       }
-      log('ok', `Minted into ${shorten(collectionTokenId, 10, 4)}`, txId);
-      form.reset();
+      setNftMeta([{ key: 'name', value: '' }]);
     });
   }
 
   return (
-    <div className="grid two">
-      <section className="panel">
-        <h2>1 · Create a collection</h2>
-        <p className="hint">
-          A collection declares the asset on-chain. Only this wallet's token key can mint into it.
-        </p>
-        <form onSubmit={onCreateCollection} className="stack">
-          <label>
-            Type
-            <select name="kind">
-              <option value="token">Fungible token</option>
-              <option value="nft">NFT collection</option>
-            </select>
-          </label>
-          <label>
-            Name <small>(stored as on-chain metadata)</small>
-            <input name="name" required placeholder="Demo Token" />
-          </label>
-          <label>
-            Max supply <small>(base units; for NFT collections this is informational)</small>
-            <input name="supply" type="number" min={1} defaultValue={1_000_000} />
-          </label>
-          <button className="primary" disabled={busy !== ''}>
-            {busy === 'collection' ? 'Creating…' : 'Create collection'}
-          </button>
-        </form>
-        {collections.length > 0 && (
-          <>
-            <h3>Created this session</h3>
-            <ul className="stack-tight">
-              {collections.map((c) => (
-                <li key={c.id} className="mono" title={c.id}>
-                  <span className="tag">{c.kind}</span> {c.name} · {shorten(c.id, 14, 6)}
-                  <button className="ghost" onClick={() => void navigator.clipboard.writeText(c.id)}>copy id</button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+    <div className="stack">
+      {!hasFunds && (
+        <div className="panel notice">
+          This wallet has no NAV. Creating a collection and minting both pay a NAV fee — fund the
+          address in your Portfolio first (on regtest: <code>npm run regtest:fund -- {shorten(session.address, 12, 6)}</code>).
+        </div>
+      )}
 
-      <section className="panel">
-        <h2>2 · Mint into it</h2>
-        <p className="hint">Wait for the collection transaction to confirm, then mint.</p>
-        <form onSubmit={onMint} className="stack">
-          <label>
-            Collection token id
-            <input
-              name="collection"
-              className="mono"
-              required
-              list="known-collections"
-              placeholder="64-hex collection id"
-            />
-            <datalist id="known-collections">
-              {collections.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </datalist>
-          </label>
-          <label>
-            If pasting an id from elsewhere, its type
-            <select name="mintKind">
-              <option value="token">Fungible token</option>
-              <option value="nft">NFT</option>
-            </select>
-          </label>
-          <label>
-            Destination address <small>(empty = this wallet)</small>
-            <input name="address" className="mono" placeholder={shorten(session.address, 16, 8)} />
-          </label>
-          <label>
-            Amount <small>(fungible mints, base units)</small>
-            <input name="amount" type="number" min={1} defaultValue={1000} />
-          </label>
-          <div className="row gap">
-            <label className="grow">
-              NFT sub-id
-              <input name="nftId" type="number" min={0} defaultValue={1} />
-            </label>
-            <label className="grow">
-              NFT name
-              <input name="nftName" placeholder="Piece #1" />
-            </label>
+      <div className="grid two">
+        <section className="panel">
+          <h2>1 · Create a collection</h2>
+          <p className="hint">
+            A collection declares the asset on-chain. Its id is derived from the metadata + max
+            supply below, and only this wallet can mint into it.
+          </p>
+
+          <div className="segmented" role="tablist" aria-label="Collection type">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={createType === 'token'}
+              className={createType === 'token' ? 'active' : ''}
+              onClick={() => setCreateType('token')}
+            >
+              Fungible token
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={createType === 'nft'}
+              className={createType === 'nft' ? 'active' : ''}
+              onClick={() => setCreateType('nft')}
+            >
+              NFT collection
+            </button>
           </div>
-          <button className="primary" disabled={busy !== ''}>
-            {busy === 'mint' ? 'Minting…' : 'Mint'}
-          </button>
-          {error && <p className="error">{error}</p>}
-        </form>
-        {locked && <UnlockInline unlock={unlock} />}
-      </section>
+
+          <form onSubmit={onCreateCollection} className="stack">
+            <MetadataEditor rows={createMeta} setRows={setCreateMeta} label="Collection metadata" />
+
+            {createType === 'token' ? (
+              <label>
+                Max supply <small>(base units — the cap this token can ever mint)</small>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxSupply}
+                  onChange={(e) => setMaxSupply(e.target.value)}
+                  required
+                />
+              </label>
+            ) : (
+              <label>
+                Max NFTs <small>(the collection can mint ids 0 … N−1; must be ≥ 1)</small>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxSupply}
+                  onChange={(e) => setMaxSupply(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+
+            <button className="primary" disabled={busy !== ''}>
+              {busy === 'collection' ? 'Creating…' : `Create ${createType === 'token' ? 'token' : 'NFT'} collection`}
+            </button>
+          </form>
+
+          {collections.length > 0 && (
+            <>
+              <h3>Created this session</h3>
+              <ul className="stack-tight">
+                {collections.map((c) => (
+                  <li key={c.id} className="collection-item">
+                    <span className="tag">{c.type}</span>
+                    <span className="mono" title={c.id}>{c.name} · {shorten(c.id, 12, 6)}</span>
+                    <span className="row gap">
+                      <button className="ghost" type="button" onClick={() => setCollectionId(c.id)}>use</button>
+                      <button className="ghost" type="button" onClick={() => void navigator.clipboard.writeText(c.id)}>copy</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+
+        <section className="panel">
+          <h2>2 · Mint into a collection</h2>
+          <p className="hint">
+            Wait for the collection transaction to confirm (a mined block), then mint. Minting to an
+            empty destination sends to this wallet.
+          </p>
+
+          <form onSubmit={onMint} className="stack">
+            <label>
+              Collection token id
+              <input
+                name="collection"
+                className="mono"
+                required
+                list="known-collections"
+                value={collectionId}
+                onChange={(e) => setCollectionId(e.target.value)}
+                placeholder="64-hex collection id"
+              />
+              <datalist id="known-collections">
+                {collections.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                ))}
+              </datalist>
+            </label>
+
+            {selected ? (
+              <p className="hint">
+                Minting a <strong>{selected.type === 'token' ? 'fungible amount' : 'unique NFT'}</strong>{' '}
+                into “{selected.name}”.
+              </p>
+            ) : (
+              <div className="segmented" role="tablist" aria-label="Mint type">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={manualMintType === 'token'}
+                  className={manualMintType === 'token' ? 'active' : ''}
+                  onClick={() => setManualMintType('token')}
+                >
+                  Fungible
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={manualMintType === 'nft'}
+                  className={manualMintType === 'nft' ? 'active' : ''}
+                  onClick={() => setManualMintType('nft')}
+                >
+                  NFT
+                </button>
+              </div>
+            )}
+
+            <label>
+              Destination address <small>(empty = this wallet)</small>
+              <input name="address" className="mono" placeholder={shorten(session.address, 16, 8)} />
+            </label>
+
+            {mintType === 'token' ? (
+              <label>
+                Amount <small>(base units to mint)</small>
+                <input
+                  type="number"
+                  min={1}
+                  value={mintAmount}
+                  onChange={(e) => setMintAmount(e.target.value)}
+                  required
+                />
+              </label>
+            ) : (
+              <>
+                <label>
+                  NFT sub-id <small>(unique index within the collection)</small>
+                  <input
+                    type="number"
+                    min={0}
+                    value={nftId}
+                    onChange={(e) => setNftId(e.target.value)}
+                    required
+                  />
+                </label>
+                <MetadataEditor rows={nftMeta} setRows={setNftMeta} label="NFT metadata (per piece)" />
+              </>
+            )}
+
+            <button className="primary" disabled={busy !== '' || collectionId.trim() === ''}>
+              {busy === 'mint' ? 'Minting…' : mintType === 'token' ? 'Mint tokens' : 'Mint NFT'}
+            </button>
+            {error && <p className="error">{error}</p>}
+          </form>
+          {locked && <UnlockInline unlock={unlock} />}
+        </section>
+      </div>
     </div>
   );
 }

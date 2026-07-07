@@ -235,6 +235,45 @@ tr.best td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
 
 .unlock-inline { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--line); }
 
+/* ---- mint studio ---- */
+.notice {
+  border-color: var(--amber);
+  background: rgba(255, 180, 84, 0.06);
+  font-size: 0.85rem;
+}
+.notice code { color: var(--amber); }
+
+.segmented {
+  display: inline-flex; padding: 3px; gap: 3px;
+  background: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  margin-bottom: 0.4rem;
+}
+.segmented button {
+  flex: 1; border: none; background: none; color: var(--muted);
+  padding: 0.4rem 0.9rem; border-radius: 6px; font-size: 0.85rem;
+}
+.segmented button.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.segmented button:hover:not(.active) { color: var(--text); }
+
+.meta-editor {
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem; background: var(--ink);
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.meta-editor-head {
+  display: flex; justify-content: space-between; align-items: center;
+  color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.meta-editor-head button { padding: 0.15rem 0.5rem; font-size: 0.75rem; }
+.meta-row { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 0.4rem; align-items: center; }
+.meta-row input { font-size: 0.82rem; }
+.meta-row .ghost.danger { padding: 0.3rem 0.55rem; font-size: 1rem; line-height: 1; }
+
+.collection-item {
+  display: flex; align-items: center; gap: 0.5rem; justify-content: space-between;
+  font-size: 0.82rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(43, 46, 66, 0.5);
+}
+.collection-item .ghost { padding: 0.15rem 0.45rem; font-size: 0.75rem; }
+
 /* ---- gate ---- */
 .gate {
   min-height: 100%; display: flex; flex-direction: column;
