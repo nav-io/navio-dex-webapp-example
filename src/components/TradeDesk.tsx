@@ -34,6 +34,7 @@ import type { QuoteSummary } from 'navio-sdk';
 import { useWallet } from '../state/WalletContext';
 import { minutesFromNow, parseIntegerUnits, shorten } from '../lib/format';
 import { UnlockInline } from './Portfolio';
+import { TokenField } from './TokenField';
 
 interface OpenRequest {
   uuid: string;
@@ -44,7 +45,7 @@ interface OpenRequest {
 }
 
 export function TradeDesk() {
-  const { session, balances, refresh, log, locked, unlock } = useWallet();
+  const { session, refresh, log, locked, unlock } = useWallet();
   const [request, setRequest] = useState<OpenRequest | null>(null);
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [slippagePct, setSlippagePct] = useState(1);
@@ -139,8 +140,6 @@ export function TradeDesk() {
     log('info', 'Quote request cancelled');
   }
 
-  const myTokens = balances.filter((b) => b.kind === 'token');
-
   return (
     <div className="grid two">
       <section className="panel">
@@ -150,20 +149,8 @@ export function TradeDesk() {
           (64-hex), or <code>NAV</code> / empty for the native coin.
         </p>
         <form onSubmit={onRequest} className="stack">
-          <label>
-            Buy <small>(what you want to receive)</small>
-            <input name="buy" className="mono" placeholder="token id, or NAV" list="my-token-ids" />
-          </label>
-          <label>
-            Pay with
-            <input name="sell" className="mono" placeholder="NAV" list="my-token-ids" />
-          </label>
-          <datalist id="my-token-ids">
-            <option value="NAV" />
-            {myTokens.map((t) => (
-              <option key={t.tokenId} value={t.tokenId} />
-            ))}
-          </datalist>
+          <TokenField name="buy" label="Buy" hint="what you want to receive" />
+          <TokenField name="sell" label="Pay with" placeholder="NAV" />
           <label>
             Amount to buy <small>(base units)</small>
             <input name="amount" required placeholder="500" />

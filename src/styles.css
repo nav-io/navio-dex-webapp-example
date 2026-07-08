@@ -313,3 +313,9 @@ tr.best td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
   .nav-item small { display: none; }
   .grid.two { grid-template-columns: 1fr; }
 }
+
+/* TokenField: compact wallet-token picker under a token-id input */
+.token-pick {
+  margin-top: 0.3rem; font-size: 0.78rem; color: var(--muted);
+  padding: 0.25rem 0.4rem; width: 100%;
+}

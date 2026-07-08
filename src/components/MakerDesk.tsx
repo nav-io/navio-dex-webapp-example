@@ -31,6 +31,7 @@ import type { PendingQuoteRequest, SwapIntent } from 'navio-sdk';
 import { useWallet } from '../state/WalletContext';
 import { minutesFromNow, parseIntegerUnits, shorten } from '../lib/format';
 import { UnlockInline } from './Portfolio';
+import { TokenField } from './TokenField';
 
 export function MakerDesk() {
   const { session, refresh, log, locked, unlock } = useWallet();
@@ -168,14 +169,14 @@ export function MakerDesk() {
             answer it.
           </p>
           <form onSubmit={onCreateIntent} className="stack">
-            <label>
-              You deliver <small>(token id, or NAV)</small>
-              <input name="tokenIn" className="mono" required placeholder="token id you sell" />
-            </label>
-            <label>
-              You receive
-              <input name="tokenOut" className="mono" placeholder="NAV" />
-            </label>
+            <TokenField
+              name="tokenIn"
+              label="You deliver"
+              hint="token id, or NAV"
+              required
+              placeholder="token id you sell"
+            />
+            <TokenField name="tokenOut" label="You receive" placeholder="NAV" />
             <div className="row gap">
               <label className="grow">Min fill<input name="min" defaultValue="1" /></label>
               <label className="grow">Max fill<input name="max" defaultValue="10000" /></label>
@@ -280,17 +281,17 @@ export function MakerDesk() {
           </p>
           <form onSubmit={onBroadcastOrder} className="stack">
             <div className="row gap">
-              <label className="grow">
-                You offer (token id / NAV)
-                <input name="offerToken" className="mono" required />
-              </label>
+              <TokenField
+                name="offerToken"
+                label="You offer"
+                hint="token id / NAV"
+                required
+                className="grow"
+              />
               <label className="grow">Amount<input name="offerAmount" required placeholder="100" /></label>
             </div>
             <div className="row gap">
-              <label className="grow">
-                You want
-                <input name="wantToken" className="mono" placeholder="NAV" />
-              </label>
+              <TokenField name="wantToken" label="You want" placeholder="NAV" className="grow" />
               <label className="grow">Amount<input name="wantAmount" required placeholder="10" /></label>
             </div>
             <label>
