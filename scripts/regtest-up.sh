@@ -79,15 +79,61 @@ if [ -f "$STATE/electrumx.pid" ] && kill -0 "$(cat "$STATE/electrumx.pid")" 2>/d
   echo "· electrumx already running (pid $(cat "$STATE/electrumx.pid"))"
 else
   echo "== starting electrumx (ws://127.0.0.1:$EX_WS_PORT)"
+  # ELECTRUMX_LEVELDB_LIB: optional dir holding an RTTI-enabled libleveldb —
+  # macOS homebrew builds LevelDB with -fno-rtti, which crashes plyvel (see
+  # docs/LOCAL-REGTEST.md). Prepended so plyvel picks it up first.
   ( cd "$ELECTRUMX_DIR" && \
     COIN=Navio NET=regtest \
     DAEMON_URL="http://$RPC_USER:$RPC_PASS@127.0.0.1:$A_RPC/" \
     DB_DIRECTORY="$STATE/electrumx-db" \
     SERVICES="ws://0.0.0.0:$EX_WS_PORT,rpc://127.0.0.1:8000" \
     COST_SOFT_LIMIT=0 COST_HARD_LIMIT=0 \
+    DYLD_LIBRARY_PATH="${ELECTRUMX_LEVELDB_LIB:+$ELECTRUMX_LEVELDB_LIB:}$DYLD_LIBRARY_PATH" \
     ${ELECTRUMX_PYTHON:-python3} ./electrumx_server \
   ) >"$STATE/logs/electrumx.log" 2>&1 &
   echo $! > "$STATE/electrumx.pid"
+fi
+
+# ---- block explorer (navio-blocks, optional) --------------------------------
+# Gives the app the same explorer REST API it uses against blocks.nav.io:
+# token listings for the Market view and collection lookups for minting.
+# navio-blocks only knows mainnet/testnet, so the regtest chain is indexed
+# under its "testnet" label and served at http://127.0.0.1:3100/api/testnet
+# (which is what the app's regtest preset expects). Skipped with a note when
+# no checkout is found — everything else works without it.
+NAVIO_BLOCKS_DIR="${NAVIO_BLOCKS_DIR:-$ROOT/../navio-blocks}"
+EXPLORER_API_PORT="${EXPLORER_API_PORT:-3100}"
+if [ ! -f "$NAVIO_BLOCKS_DIR/package.json" ]; then
+  echo "· explorer skipped (no navio-blocks checkout at $NAVIO_BLOCKS_DIR — set NAVIO_BLOCKS_DIR)"
+elif [ -f "$STATE/explorer-api.pid" ] && kill -0 "$(cat "$STATE/explorer-api.pid")" 2>/dev/null; then
+  echo "· explorer already running (pid $(cat "$STATE/explorer-api.pid"))"
+else
+  echo "== starting block explorer (http://127.0.0.1:$EXPLORER_API_PORT/api/testnet)"
+  mkdir -p "$STATE/explorer"
+  cat > "$STATE/explorer/regtest.env" <<EOF
+NETWORK=testnet
+RPC_HOST=127.0.0.1
+RPC_PORT=$A_RPC
+RPC_USER=$RPC_USER
+RPC_PASSWORD=$RPC_PASS
+DB_PATH=$STATE/explorer/explorer.db
+TESTNET_DB_PATH=$STATE/explorer/explorer.db
+TESTNET_RPC_HOST=127.0.0.1
+TESTNET_RPC_PORT=$A_RPC
+TESTNET_RPC_USER=$RPC_USER
+TESTNET_RPC_PASSWORD=$RPC_PASS
+API_PORT=$EXPLORER_API_PORT
+API_HOST=127.0.0.1
+POLL_INTERVAL=2000
+BSC_WNAV_ENABLED=false
+NAVIO_AUDIT_ENABLED=false
+EOF
+  ( cd "$NAVIO_BLOCKS_DIR" && ENV_FILE="$STATE/explorer/regtest.env" npm -w packages/indexer run dev ) \
+    >"$STATE/logs/explorer-indexer.log" 2>&1 &
+  echo $! > "$STATE/explorer-indexer.pid"
+  ( cd "$NAVIO_BLOCKS_DIR" && ENV_FILE="$STATE/explorer/regtest.env" npm -w packages/api run dev ) \
+    >"$STATE/logs/explorer-api.log" 2>&1 &
+  echo $! > "$STATE/explorer-api.pid"
 fi
 
 sleep 2
@@ -103,6 +149,8 @@ echo "regtest environment is up"
 echo "  node A rpc     127.0.0.1:$A_RPC   (behind ElectrumX; the app's node)"
 echo "  node B rpc     127.0.0.1:$B_RPC   (counterparty/faucet)"
 echo "  electrumx      ws://127.0.0.1:$EX_WS_PORT"
+[ -f "$STATE/explorer-api.pid" ] && \
+echo "  explorer api   http://127.0.0.1:$EXPLORER_API_PORT/api/testnet"
 echo "  DEMO token id  $(cat "$STATE/demo-token.id")"
 echo
 echo "next:"

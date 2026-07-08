@@ -43,7 +43,12 @@ export const NETWORK_PRESETS: NetworkPreset[] = [
     label: 'Local regtest (scripts/regtest-up.sh)',
     network: 'regtest',
     electrum: { host: '127.0.0.1', port: 50005, ssl: false },
-    explorerApi: null,
+    // regtest-up.sh starts a local navio-blocks explorer when NAVIO_BLOCKS_DIR
+    // points at a checkout. navio-blocks only knows mainnet/testnet, so the
+    // regtest chain is indexed under its "testnet" label — hence /api/testnet.
+    // Explorer calls are best-effort: if it isn't running everything still
+    // works, minus Market listings and mint-id resolution via explorer.
+    explorerApi: 'http://127.0.0.1:3100/api/testnet',
   },
 ];
 

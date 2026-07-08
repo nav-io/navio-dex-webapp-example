@@ -5,11 +5,19 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-for name in electrumx nodeA nodeB; do
+for name in explorer-api explorer-indexer electrumx nodeA nodeB; do
   if [ -f "$STATE/$name.pid" ]; then
     PID=$(cat "$STATE/$name.pid")
     if kill -0 "$PID" 2>/dev/null; then
-      kill "$PID" 2>/dev/null || true
+      # The explorer pids are npm wrappers — take their descendants
+      # (npm → tsx → node) down with them, depth-first.
+      kill_tree() {
+        local children
+        children=$(pgrep -P "$1" 2>/dev/null || true)
+        for c in $children; do kill_tree "$c"; done
+        kill "$1" 2>/dev/null || true
+      }
+      kill_tree "$PID"
       echo "· stopped $name (pid $PID)"
     fi
     rm -f "$STATE/$name.pid"

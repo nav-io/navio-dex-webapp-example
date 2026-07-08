@@ -26,8 +26,8 @@ faucet.
 
 ## Prerequisites
 
-Two sibling checkouts (paths overridable via `NAVIO_CORE_DIR` /
-`ELECTRUMX_DIR`):
+Sibling checkouts (paths overridable via `NAVIO_CORE_DIR` /
+`ELECTRUMX_DIR` / `NAVIO_BLOCKS_DIR`):
 
 1. **navio-core**, branch `p2pmsg` (PR [nav-io/navio-core#263]), built:
 
@@ -54,10 +54,33 @@ Two sibling checkouts (paths overridable via `NAVIO_CORE_DIR` /
    Point `ELECTRUMX_PYTHON` at a specific interpreter if your default
    python3 isn't the one with the deps.
 
+   *macOS note*: Homebrew builds LevelDB without RTTI, which crashes
+   plyvel (`typeinfo for leveldb::Comparator` missing). Build LevelDB from
+   source with `-frtti` and point `ELECTRUMX_LEVELDB_LIB` at its `lib/`
+   directory; `regtest-up.sh` prepends it to `DYLD_LIBRARY_PATH`.
+
+3. **navio-blocks** (optional, recommended): the block explorer whose REST
+   API the app uses for Market listings and collection lookups when
+   minting. Without it the app still runs — those views just fall back to
+   wallet-only data.
+
+   ```sh
+   git clone https://github.com/nav-io/navio-blocks ../navio-blocks
+   cd ../navio-blocks && npm install
+   ```
+
+   `regtest-up.sh` auto-detects the checkout (override with
+   `NAVIO_BLOCKS_DIR`) and starts its indexer + API against node A,
+   serving `http://127.0.0.1:3100/api/testnet` — the base the app's
+   regtest preset expects. navio-blocks only knows mainnet/testnet, so
+   the regtest chain is indexed under its "testnet" label; that's
+   cosmetic. Port overridable with `EXPLORER_API_PORT` (keep the preset
+   in `src/lib/settings.ts` in sync if you change it).
+
 ## The loop
 
 ```sh
-npm run regtest:up        # daemons + funded maker wallet + DEMO token + electrumx
+npm run regtest:up        # daemons + funded maker wallet + DEMO token + electrumx + explorer
 npm run dev               # open the app → create wallet → network: "Local regtest"
 
 # copy the address from Portfolio → Receive, then:
