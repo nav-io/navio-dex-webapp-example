@@ -107,7 +107,7 @@ export function MintStudio() {
     let cancelled = false;
     setChainLoading(true);
     const t = setTimeout(async () => {
-      const info = await fetchCollectionInfo(session.client, id);
+      const info = await fetchCollectionInfo(session.client, session.explorer, id);
       if (!cancelled) {
         setChainInfo(info);
         setChainLoading(false);
@@ -166,13 +166,12 @@ export function MintStudio() {
 
   function onMint(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const id = collectionId.trim();
-    // Note: we do NOT hard-block on a key mismatch. The status panel already
-    // warns when this wallet's derived key doesn't match the collection's, but
-    // that comparison depends on the daemon and binding serializing the token
-    // key identically — if they ever diverge we'd wrongly block a valid mint.
-    // So we let the attempt proceed; the chain is the final authority, and a
-    // genuine mismatch fails on-chain with the context the warning provided.
+    const entered = collectionId.trim();
+    // Mint calls need Hash(metadata‖supply), NOT the chain/explorer token id.
+    // When we resolved the collection on-chain, use its recomputed mintId;
+    // otherwise assume the pasted id is already the mint id (e.g. the value
+    // createTokenCollection returned for a collection made this session).
+    const id = chainInfo?.mintId ?? entered;
     void guard('mint', async () => {
       const address = String((e.target as HTMLFormElement).address?.value || '').trim() || session!.address;
       let txId: string;
@@ -188,7 +187,7 @@ export function MintStudio() {
           collectionTokenId: id,
           amount: BigInt(mintAmount || '0'),
         }));
-        log('ok', `Minted ${mintAmount} into ${shorten(id, 10, 4)}`, txId);
+        log('ok', `Minted ${mintAmount} into ${shorten(entered, 10, 4)}`, txId);
       } else {
         // The chain requires 0 <= nftId < collection max supply.
         const cap = chainInfo ? Number(chainInfo.maxSupply) : selected?.maxSupply;
@@ -201,7 +200,7 @@ export function MintStudio() {
           nftId: BigInt(nftId || '0'),
           metadata: toMetadata(nftMeta),
         }));
-        log('ok', `Minted NFT #${nftId} into ${shorten(id, 10, 4)}`, txId);
+        log('ok', `Minted NFT #${nftId} into ${shorten(entered, 10, 4)}`, txId);
       }
       setNftMeta([{ key: 'name', value: '' }]);
     });

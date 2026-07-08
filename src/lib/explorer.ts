@@ -76,7 +76,9 @@ export class ExplorerApi {
   }
 
   token(tokenId: string): Promise<ExplorerToken | null> {
-    return this.get<ExplorerToken>(`/token/${tokenId}`);
+    // Note: the collection-detail endpoint is /tokens/{id} (plural), not
+    // /token/{id} — the singular path 404s.
+    return this.get<ExplorerToken>(`/tokens/${tokenId}`);
   }
 
   /** Human link to a transaction on the explorer website, when one exists. */
