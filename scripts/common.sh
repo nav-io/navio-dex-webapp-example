@@ -24,8 +24,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE="$ROOT/.regtest"
 
-NAVIO_CORE_DIR="${NAVIO_CORE_DIR:-$ROOT/../navio-core}"
-ELECTRUMX_DIR="${ELECTRUMX_DIR:-$ROOT/../electrumx}"
+# regtest-up.sh records the directories it resolved into $STATE/env.sh so the
+# other scripts (fund, maker, down) reuse the SAME checkouts in later shells
+# where the env vars aren't exported anymore. A stale navio-cli from a
+# different checkout fails subtly — e.g. numeric RPC args passed as strings
+# because its param-conversion table predates the trading RPCs. Explicit env
+# vars still win over the recorded values.
+if [ -f "$STATE/env.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$STATE/env.sh"
+fi
+
+NAVIO_CORE_DIR="${NAVIO_CORE_DIR:-${SAVED_NAVIO_CORE_DIR:-$ROOT/../navio-core}}"
+ELECTRUMX_DIR="${ELECTRUMX_DIR:-${SAVED_ELECTRUMX_DIR:-$ROOT/../electrumx}}"
+ELECTRUMX_PYTHON="${ELECTRUMX_PYTHON:-${SAVED_ELECTRUMX_PYTHON:-python3}}"
+ELECTRUMX_LEVELDB_LIB="${ELECTRUMX_LEVELDB_LIB:-${SAVED_ELECTRUMX_LEVELDB_LIB:-}}"
+NAVIO_BLOCKS_DIR="${NAVIO_BLOCKS_DIR:-${SAVED_NAVIO_BLOCKS_DIR:-$ROOT/../navio-blocks}}"
 
 NAVIOD="${NAVIOD:-$NAVIO_CORE_DIR/build/bin/naviod}"
 NAVIO_CLI="${NAVIO_CLI:-$NAVIO_CORE_DIR/build/bin/navio-cli}"

@@ -34,6 +34,16 @@ mkdir -p "$STATE"/{nodeA,nodeB,electrumx-db,logs}
   exit 1
 }
 
+# Record the resolved checkouts so fund/maker/down reuse the exact same ones
+# even in shells where these env vars aren't exported (see common.sh).
+cat > "$STATE/env.sh" <<EOF
+SAVED_NAVIO_CORE_DIR="$NAVIO_CORE_DIR"
+SAVED_ELECTRUMX_DIR="$ELECTRUMX_DIR"
+SAVED_ELECTRUMX_PYTHON="$ELECTRUMX_PYTHON"
+SAVED_ELECTRUMX_LEVELDB_LIB="$ELECTRUMX_LEVELDB_LIB"
+SAVED_NAVIO_BLOCKS_DIR="$NAVIO_BLOCKS_DIR"
+EOF
+
 start_node() { # start_node <name> <p2p> <rpc> <extra...>
   local name=$1 p2p=$2 rpc=$3; shift 3
   if [ -f "$STATE/$name.pid" ] && kill -0 "$(cat "$STATE/$name.pid")" 2>/dev/null; then
