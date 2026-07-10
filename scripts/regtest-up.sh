@@ -104,6 +104,27 @@ else
   echo $! > "$STATE/electrumx.pid"
 fi
 
+# ---- auto-miner --------------------------------------------------------------
+# regtest mines no blocks on its own, so anything broadcast (mints, sends,
+# swaps) would sit in the mempool forever. Tick a block to the maker wallet
+# every BLOCK_SECONDS (default 15) so transactions confirm like on a real
+# chain. Disable with BLOCK_SECONDS=0.
+BLOCK_SECONDS="${BLOCK_SECONDS:-15}"
+if [ "$BLOCK_SECONDS" = "0" ]; then
+  echo "· auto-miner disabled (BLOCK_SECONDS=0)"
+elif [ -f "$STATE/miner.pid" ] && kill -0 "$(cat "$STATE/miner.pid")" 2>/dev/null; then
+  echo "· auto-miner already running (pid $(cat "$STATE/miner.pid"))"
+else
+  echo "== starting auto-miner (1 block / ${BLOCK_SECONDS}s)"
+  (
+    MINE_ADDR=$(cli_b_wallet getnewaddress "" blsct)
+    while sleep "$BLOCK_SECONDS"; do
+      cli_b generatetoblsctaddress 1 "$MINE_ADDR" >/dev/null 2>&1 || true
+    done
+  ) >"$STATE/logs/miner.log" 2>&1 &
+  echo $! > "$STATE/miner.pid"
+fi
+
 # ---- block explorer (navio-blocks, optional) --------------------------------
 # Gives the app the same explorer REST API it uses against blocks.nav.io:
 # token listings for the Market view and collection lookups for minting.

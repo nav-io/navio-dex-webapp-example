@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-for name in explorer-api explorer-indexer electrumx nodeA nodeB; do
+for name in miner explorer-api explorer-indexer electrumx nodeA nodeB; do
   if [ -f "$STATE/$name.pid" ]; then
     PID=$(cat "$STATE/$name.pid")
     if kill -0 "$PID" 2>/dev/null; then

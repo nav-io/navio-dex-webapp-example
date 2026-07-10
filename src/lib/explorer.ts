@@ -46,7 +46,11 @@ export function tokenName(t: ExplorerToken): string | null {
 }
 
 export class ExplorerApi {
-  constructor(private readonly base: string | null) {}
+  constructor(
+    private readonly base: string | null,
+    /** Explorer website base for human-facing links; null = API only. */
+    private readonly site: string | null = null,
+  ) {}
 
   get available(): boolean {
     return this.base !== null;
@@ -81,10 +85,13 @@ export class ExplorerApi {
     return this.get<ExplorerToken>(`/tokens/${tokenId}`);
   }
 
-  /** Human link to a transaction on the explorer website, when one exists. */
+  /**
+   * Link for a transaction: the explorer website when one exists, otherwise
+   * the API's JSON detail — raw but real, better than a dead frontend route.
+   */
   txUrl(txid: string): string | null {
-    if (!this.base) return null;
-    const site = this.base.replace(/\/api(\/testnet)?$/, (m) => (m.includes('testnet') ? '/testnet' : ''));
-    return `${site}/tx/${txid}`;
+    if (this.site) return `${this.site}/tx/${txid}`;
+    if (this.base) return `${this.base}/txs/${txid}`;
+    return null;
   }
 }

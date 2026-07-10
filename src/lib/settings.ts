@@ -28,6 +28,12 @@ export interface NetworkPreset {
   electrum: { host: string; port: number; ssl: boolean };
   /** blocks.nav.io style explorer API base, or null when unavailable. */
   explorerApi: string | null;
+  /**
+   * Human-facing explorer website base (for tx links), or null when only the
+   * API runs — local regtest starts navio-blocks' indexer + API but not its
+   * frontend, so links there fall back to the API's JSON endpoints.
+   */
+  explorerSite: string | null;
 }
 
 export const NETWORK_PRESETS: NetworkPreset[] = [
@@ -37,6 +43,7 @@ export const NETWORK_PRESETS: NetworkPreset[] = [
     network: 'testnet',
     electrum: { host: 'testnet.nav.io', port: 50005, ssl: window.location.protocol === 'https:' },
     explorerApi: 'https://blocks.nav.io/api/testnet',
+    explorerSite: 'https://blocks.nav.io/testnet',
   },
   {
     id: 'regtest',
@@ -49,6 +56,7 @@ export const NETWORK_PRESETS: NetworkPreset[] = [
     // Explorer calls are best-effort: if it isn't running everything still
     // works, minus Market listings and mint-id resolution via explorer.
     explorerApi: 'http://127.0.0.1:3100/api/testnet',
+    explorerSite: null,
   },
 ];
 

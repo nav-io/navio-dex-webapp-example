@@ -175,7 +175,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         client,
         entry,
         preset,
-        explorer: new ExplorerApi(preset.explorerApi),
+        explorer: new ExplorerApi(preset.explorerApi, preset.explorerSite),
         address,
         tradingAvailable: await detectTrading(client),
       };
