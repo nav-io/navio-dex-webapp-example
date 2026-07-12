@@ -18,12 +18,20 @@ export function Amount({
 }: {
   units: bigint;
   suffix?: string;
+  /**
+   * How many decimal places the ASSET has — 8 for NAV, 0 for tokens.
+   * Token amounts are plain integers of base units: with decimals=0 the
+   * value renders as-is, NOT divided by 1e8. (An earlier version always
+   * divided by COIN and only trimmed the fraction, which displayed every
+   * token balance under 10^8 units as "0".)
+   */
   decimals?: number;
 }) {
   const { concealAmounts } = useWallet();
+  const text = decimals === 0 ? units.toLocaleString('en-US') : formatUnits(units, decimals);
   return (
     <span className={`amount${concealAmounts ? ' concealed' : ''}`} tabIndex={concealAmounts ? 0 : -1}>
-      <span className="amount-value">{formatUnits(units, decimals)}</span>
+      <span className="amount-value">{text}</span>
       {suffix ? <span className="amount-suffix">{suffix}</span> : null}
     </span>
   );
