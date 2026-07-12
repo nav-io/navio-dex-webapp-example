@@ -30,7 +30,15 @@ case "${1:-maker}" in
     cli_b setswapintent "$TOKEN_ID" "" 1 100000 10000000 "$EXPIRY" >/dev/null
     echo "== answering matching requests (ctrl-C to stop)"
     echo "   In the app: Trade → buy = $TOKEN_ID, pay with NAV"
+    INTENT_RENEW_AT=$(( $(date +%s) + 3000 ))   # re-register before the 1h expiry
     while true; do
+      # Intents expire on the daemon; a long-running maker must renew or it
+      # silently stops matching ("quote never arrives").
+      if [ "$(date +%s)" -ge "$INTENT_RENEW_AT" ]; then
+        cli_b setswapintent "$TOKEN_ID" "" 1 100000 10000000 "$(( $(date +%s) + 3600 ))" >/dev/null \
+          && echo "· intent renewed (+1h)"
+        INTENT_RENEW_AT=$(( $(date +%s) + 3000 ))
+      fi
       PENDING=$(cli_b listpendingquoterequests)
       COUNT=$(echo "$PENDING" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
       if [ "$COUNT" -gt 0 ]; then
